@@ -1,0 +1,7 @@
+{
+  "name": "Conference Booth AI Guidance Assistant",
+  "description": "An interactive, voice-enabled AI assistant to guide conference attendees to relevant product demonstrations. It helps users discover solutions through direct browsing or a guided consultation.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
