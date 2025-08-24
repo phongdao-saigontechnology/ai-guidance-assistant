@@ -6,7 +6,8 @@ import Loader from './Loader';
 import DemoCard from './DemoCard';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
 import { useSpeechSynthesis } from '../hooks/useSpeechSynthesis';
-import { getGuidance, getDemosByCategory } from '../services/geminiService';
+import { getDemosByCategory } from '../services/geminiService';
+import { useGeminiLive } from '../hooks/useGeminiLive';
 
 interface ConsultationViewProps {
   onBack: () => void;
@@ -19,11 +20,57 @@ const ConsultationView: React.FC<ConsultationViewProps> = ({ onBack, onNavigate 
   const [isLoading, setIsLoading] = useState(false);
   const { speak, cancel } = useSpeechSynthesis();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { connect, disconnect, send, isConnected, error: liveError } = useGeminiLive();
 
   const addMessage = (text: string, sender: 'user' | 'ai', recommendedDemos?: Demo[]) => {
     setMessages(prev => [...prev, { id: Date.now().toString(), text, sender, recommendedDemos }]);
   };
-  
+
+  const handleLiveMessage = (message: any) => {
+    if (message.text) {
+        try {
+            const jsonResponse = JSON.parse(message.text);
+            if (jsonResponse.reply) {
+                setMessages(prev => {
+                    const lastMessage = prev[prev.length - 1];
+                    if (lastMessage && lastMessage.sender === 'ai' && !lastMessage.recommendedDemos) {
+                        const updatedMessages = [...prev];
+                        updatedMessages[prev.length - 1] = { ...lastMessage, text: jsonResponse.reply };
+                        return updatedMessages;
+                    } else {
+                        return [...prev, { id: Date.now().toString(), text: jsonResponse.reply, sender: 'ai' }];
+                    }
+                });
+            }
+            if (jsonResponse.category) {
+                const demos = getDemosByCategory(jsonResponse.category);
+                if (demos.length > 0) {
+                    const demoText = `Here are some demos in the ${jsonResponse.category} category.`;
+                    addMessage(demoText, 'ai', demos);
+                    speak(demoText);
+                }
+            }
+        } catch (e) {
+            // Not a JSON response, handle as plain text
+            setMessages(prev => {
+                const lastMessage = prev[prev.length - 1];
+                if (lastMessage && lastMessage.sender === 'ai') {
+                    const updatedMessages = [...prev];
+                    updatedMessages[prev.length - 1] = { ...lastMessage, text: lastMessage.text + message.text };
+                    return updatedMessages;
+                } else {
+                    return [...prev, { id: Date.now().toString(), text: message.text, sender: 'ai' }];
+                }
+            });
+        }
+    }
+    if (message.serverContent && message.serverContent.turnComplete) {
+        setIsLoading(false);
+        const fullResponse = messages[messages.length - 1]?.text || '';
+        speak(fullResponse);
+    }
+};
+
   const handleUserSubmit = useCallback(async (text: string) => {
     if (!text || isLoading) return;
 
@@ -31,29 +78,26 @@ const ConsultationView: React.FC<ConsultationViewProps> = ({ onBack, onNavigate 
     addMessage(text, 'user');
     setUserInput('');
     setIsLoading(true);
-
-    const result = await getGuidance(text);
-    addMessage(result.reply, 'ai');
-    speak(result.reply, () => {
-        if(result.category) {
-            const demos = getDemosByCategory(result.category);
-            const demoText = `Here are some demos in the ${result.category} category.`;
-            addMessage(demoText, 'ai', demos);
-            speak(demoText);
-        }
-    });
-    setIsLoading(false);
-  }, [isLoading, cancel, speak]);
+    send(text);
+  }, [isLoading, cancel, send]);
 
 
   const { isListening, isAvailable, startListening, error } = useSpeechRecognition(handleUserSubmit);
 
   useEffect(() => {
-    const initialMessage = "Hello! I'm here to help you find the right AI solution. To start, could you tell me what you're interested in? For example, diagnostics, hospital management, or patient care.";
-    addMessage(initialMessage, 'ai');
-    speak(initialMessage);
+    connect(handleLiveMessage);
+    return () => disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (isConnected) {
+        const initialMessage = "Hello! I'm here to help you find the right AI solution. To start, could you tell me what you're interested in? For example, diagnostics, hospital management, or patient care.";
+        addMessage(initialMessage, 'ai');
+        speak(initialMessage);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isConnected]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
