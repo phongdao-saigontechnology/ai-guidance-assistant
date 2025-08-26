@@ -26,7 +26,7 @@ const iconPaths: Record<IconProps['name'], React.ReactNode> = {
     </>
   ),
   user: <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />,
-  close: <path d="M18 6 6 18" /><path d="m6 6 12 12" />,
+  close: <><path d="M18 6 6 18" /><path d="m6 6 12 12" /></>,
   list: <path d="M8 6h10M6 12h12M4 18h14" />,
   chat: <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />,
 };
